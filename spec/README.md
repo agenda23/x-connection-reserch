@@ -1,31 +1,36 @@
-# X トレンド取得アプリ — 仕様ドキュメント
+# X トレンド取得アプリ（x-trends）— 仕様ドキュメント
 
-emusks を用いて X（Twitter）のトレンドを取得し、CLI および n8n から利用できるアプリケーションを開発するための要件・仕様集です。
+emusks を用いて X のトレンドを **低負荷・高品質（ノイズ除去）** で取得し、CLI および n8n から利用するアプリケーションの仕様集です。
+
+## 設計方針（要約）
+
+- **本体:** トレンド一覧（`explore` / `sidebar` / `merge`）+ 地域指定 + `promoted` 除外 + diff
+- **高機能:** 大量取得ではなく、正規化・フィルタ・差分で品質を上げる
+- **回避:** ユーザー API、高並列、深いページネーション、x-res 級の大量分析
+- **任意（Phase 2）:** 軽量 search、単件 AI サマリー（detail）
 
 ## ドキュメント一覧
 
 | ファイル | 内容 |
 |---------|------|
-| [01-emusks-research.md](./01-emusks-research.md) | emusks の調査結果（認証・API・制約） |
-| [02-requirements.md](./02-requirements.md) | 機能要件・非機能要件・ユースケース |
-| [03-architecture.md](./03-architecture.md) | システム構成・コンポーネント設計 |
-| [04-api-spec.md](./04-api-spec.md) | CLI / HTTP API のインターフェース仕様 |
-| [05-data-schema.md](./05-data-schema.md) | 正規化データモデル・レスポンス形式 |
+| [01-emusks-research.md](./01-emusks-research.md) | emusks 調査（認証・API・ホスティング・BAN リスク） |
+| [02-requirements.md](./02-requirements.md) | 要件・スコープ・フェーズ |
+| [03-architecture.md](./03-architecture.md) | システム構成・負荷制御 |
+| [04-api-spec.md](./04-api-spec.md) | CLI / HTTP API |
+| [05-data-schema.md](./05-data-schema.md) | データモデル・パーサー |
+| [ref/x-res-emusks-feasibility.md](./ref/x-res-emusks-feasibility.md) | x-res 参考仕様との適合性 |
+| [ref/X (Twitter) Research CLI Tool x-res 設計仕様書.md](./ref/X%20(Twitter)%20Research%20CLI%20Tool%20x-res%20設計仕様書.md) | 参考ドキュメント（原文） |
 
 ## 前提
 
-- **ランタイム:** Node.js 20+（emusks は ESM のみ）
-- **依存ライブラリ:** emusks `^2.3.3`（pnpm 管理）
-- **認証:** ルート `.env` の `TWITTER_AUTH_TOKEN` を起動時に自動読み込み（最優先）
-- **ライセンス注意:** emusks は AGPL-3.0-only。本アプリを配布・公開する場合はライセンス要件を満たす必要あり
+- **ランタイム:** Node.js 20+
+- **依存:** emusks `^2.3.3`（pnpm）
+- **認証:** `.env` の `TWITTER_AUTH_TOKEN`（`ct0` 不要）
+- **ライセンス:** emusks は AGPL-3.0-only
 
-## 調査対象バージョン
+## 実装フェーズ
 
-- emusks: **2.3.3**（`node_modules/emusks`）
-- 調査日: 2026-06-07
-
-## 関連リソース
-
-- [emusks 公式ドキュメント](https://emusks.tiago.zip)
-- [emusks Trends API](https://emusks.tiago.zip/discovery/trends)
-- [TWITTER-CLI-SPEC.md](../TWITTER-CLI-SPEC.md)（twitter-cli 側の仕様、参考用）
+| Phase | 内容 |
+|-------|------|
+| **1** | `list` / `locations` / `settings` / `serve`、フィルタ・diff・HTTP |
+| **2** | `search` / `detail`（任意） |

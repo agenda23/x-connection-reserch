@@ -22,7 +22,8 @@
 │                  ▼                                           │
 │  ┌──────────────────────────────────────────────────────┐   │
 │  │              Service Layer                            │   │
-│  │  TrendsService / LocationsService / SearchService     │   │
+│  │  TrendsService / LocationsService / SearchService*    │   │
+│  │  (*SearchService は Phase 2 のみ)                     │   │
 │  └────────────────────────┬─────────────────────────────┘   │
 │                           ▼                                  │
 │  ┌──────────────────────────────────────────────────────┐   │
@@ -67,7 +68,8 @@ twitter-cli-test/
 │   ├── config.ts            # .env 自動読み込み・設定解決
 │   ├── lib/
 │   │   ├── emusks-client.ts # emusks ラッパー（シングルトンセッション）
-│   │   ├── cache.ts         # メモリキャッシュ
+│   │   ├── cache.ts         # メモリキャッシュ・diff 用前回スナップショット
+│   │   ├── rate-limiter.ts  # 直列化・REQUEST_DELAY_MS
 │   │   └── errors.ts        # エラーコード定義
 │   ├── parsers/
 │   │   ├── explore.ts       # ExplorePage レスポンスパーサー
@@ -135,8 +137,10 @@ config.ts が import される
 
 - emusks インスタンスのライフサイクル管理
 - 初回 `login()` の実行とセッション保持
-- レート制限・一時エラー時のリトライ（指数バックオフ、最大 3 回）
-- `woeid` 変更時の `setExploreSettings` 呼び出し
+- **直列実行**と `REQUEST_DELAY_MS` による呼び出し間隔制御（並列禁止）
+- 429 / ロック検知時はリトライせず即 `RATE_LIMITED`
+- `woeid` 変更時のみ `setExploreSettings` を 1 回呼ぶ
+- `apiCalls` カウンタをメタ情報に返す
 
 ```ts
 class EmusksClient {
@@ -166,9 +170,14 @@ class EmusksClient {
 ```ts
 class TrendsService {
   async listTrends(params: ListTrendsParams): Promise<TrendListResponse>;
+  // Phase 2 のみ:
   async getTrendDetail(trendId: string): Promise<TrendDetail>;
-  async getRelevantUsers(trendName: string): Promise<RelevantUsersResponse>;
 }
+
+// listTrends 内部処理:
+// 1. fetch (explore/sidebar/merge)
+// 2. TrendParser.parse + filterPromoted + filterCategories
+// 3. optional: diffWithPrevious(cacheKey)
 ```
 
 ### 4.3 TrendParser
@@ -176,8 +185,9 @@ class TrendsService {
 **責務:**
 
 - emusks 生 GraphQL JSON → `TrendItem[]` への変換
-- パース失敗時は `partial: true` フラグと raw 断片を返す
-- バージョンタグ付き（`parserVersion: "1"`）で将来の互換性を確保
+- **`promoted` / ツイートカード等の除外**（ノイズ除去の要）
+- `merge` 時は `name` で重複除去し better rank を採用
+- パース失敗時は `partial: true`
 
 ### 4.4 HTTP Server
 
@@ -213,13 +223,15 @@ TrendsService.listTrends({ woeid: 23424856 })
     ├─► EmusksClient.setLocation(23424856)  ※ currentWoeid と異なる場合のみ
     │       └─► client.trends.setExploreSettings({ location: { woeid } })
     │
-    ├─► client.trends.explore({ count, cursor })
+    ├─► source に応じて explore / sidebar / 両方（merge）
     │
-    ├─► TrendParser.parse(exploreResponse)
+    ├─► TrendParser.parse → filterPromoted（デフォルト on）
     │
-    ├─► Cache set (TTL 5min)
+    ├─► diff? → 前回スナップショットと比較 → data.changes
     │
-    └─► TrendListResponse
+    ├─► Cache set (TTL 5min) + スナップショット更新
+    │
+    └─► TrendListResponse（meta.apiCalls 付き）
 ```
 
 ### 5.2 n8n 連携パターン
@@ -230,7 +242,7 @@ TrendsService.listTrends({ woeid: 23424856 })
 [n8n Schedule Trigger]
         │
         ▼
-[HTTP Request: GET http://host:3920/api/v1/trends?woeid=23424856]
+[HTTP Request: GET .../trends?woeid=23424856&exclude-promoted=true&diff=true]
   Headers: X-API-Key: ***
         │
         ▼
@@ -314,11 +326,12 @@ docker-compose.yml
 | 判断 | 選択 | 理由 |
 |------|------|------|
 | 地域切り替え | `setExploreSettings` | emusks が公式ドキュメントで推奨 |
-| トレンド取得元 | `explore` をデフォルト、`sidebar` をオプション | 情報量の多い方をデフォルトに |
+| トレンド取得元 | `explore` デフォルト、`merge` で高機能化 | API 増は最大 +1。ノイズはフィルタで除去 |
+| ユーザー API | **使わない** | `relevantUsers` 等は回避 |
 | 地点一覧 | `available()` | v1.1 で安定 |
-| 地点検索 | `v2("guide/explore_locations_with_auto_complete")` | ヘルパー未実装のため raw 呼び出し |
-| 投稿検索 | `search.tweets` / `search.latest` | パース済みで利用しやすい |
-| クライアント | `web` デフォルト | 最も無難 |
+| 投稿検索 | Phase 2 のみ・上限付き | トレンドの浅い深掘り専用 |
+| クライアント | `web` 固定推奨 | BAN リスク低減 |
+| 高機能の定義 | パーサー・フィルタ・diff | 大量取得ではない |
 
 ## 9. セキュリティアーキテクチャ
 
@@ -339,11 +352,11 @@ Internet / n8n
   TWITTER_AUTH_TOKEN（.env 最優先で自動読み込み）
 ```
 
-## 10. 実装フェーズ案
+## 10. 実装フェーズ
 
-| フェーズ | 内容 | 成果物 |
-|---------|------|--------|
-| Phase 1 | emusks 接続・トレンド一覧・地点一覧・CLI `list`/`locations` | 動作する最小 CLI |
-| Phase 2 | 正規化パーサー・キャッシュ・HTTP API | n8n 連携可能 |
-| Phase 3 | detail / users / search・OpenAPI・Docker | 本番運用可能 |
-| Phase 4 | 監視・Webhook・テスト拡充 | 安定運用 |
+| Phase | 内容 | 成果物 |
+|-------|------|--------|
+| **1** | login・list（explore/sidebar/merge）・フィルタ・diff・locations・settings・HTTP・キャッシュ | MVP / n8n 連携 |
+| **2** | 軽量 search・detail（任意）・OpenAPI・Docker | 深掘りオプション |
+
+**Phase 1 でやらないこと:** `users`、`relevantUsers`、深いページネーション、並列取得

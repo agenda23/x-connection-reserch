@@ -66,7 +66,11 @@ uv run twitter -v whoami
 
 ### x-trends-app（emusks・開発予定）
 
-仕様は [spec/](./spec/) を参照。認証は `.env` の `TWITTER_AUTH_TOKEN` のみ（`ct0` 不要）。
+仕様は [spec/](./spec/) を参照。
+
+- トレンド取得を中心に、プロモーション除外・地域指定・差分検知を提供
+- 認証は `.env` の `TWITTER_AUTH_TOKEN` のみ（`ct0` 不要）
+- ユーザー API・大量取得は対象外。軽量検索は Phase 2 オプション
 
 ### emusks（直接利用）
 
