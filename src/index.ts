@@ -5,7 +5,10 @@ import { serve } from "@hono/node-server";
 import { config } from "./config.js";
 import { listTrends } from "./services/trends.js";
 import { listLocations, getSettings } from "./services/locations.js";
+import { searchTweets } from "./services/search.js";
+import { getTrendDetail } from "./services/detail.js";
 import { AppError, HTTP_STATUS } from "./lib/errors.js";
+import { openApiSpec } from "./openapi.js";
 import type { ErrorResponse } from "./types/trend.js";
 
 const app = new Hono();
@@ -85,6 +88,49 @@ app.get("/api/v1/settings", async (c) => {
     return handleApiError(c, err);
   }
 });
+
+// ── trend detail (Phase 2) ────────────────────────────────────────────────────
+
+app.get("/api/v1/trends/:trendId", async (c) => {
+  try {
+    const trendId = c.req.param("trendId");
+    const raw = c.req.query("raw") === "true";
+    const result = await getTrendDetail(trendId, raw);
+    return c.json(result);
+  } catch (err) {
+    return handleApiError(c, err);
+  }
+});
+
+// ── search (Phase 2) ──────────────────────────────────────────────────────────
+
+app.get("/api/v1/search", async (c) => {
+  try {
+    const q = c.req.query();
+    const mode = (q["mode"] ?? "top") as "top" | "latest";
+    if (mode !== "top" && mode !== "latest") {
+      return c.json<ErrorResponse>(
+        { ok: false, error: { code: "INVALID_PARAMS", message: 'mode must be "top" or "latest"' } },
+        400,
+      );
+    }
+    const result = await searchTweets({
+      query: q["query"] ?? "",
+      mode,
+      count: q["count"] ? Number(q["count"]) : undefined,
+      maxPages: q["max-pages"] ? Number(q["max-pages"]) : undefined,
+      since: q["since"],
+      raw: q["raw"] === "true",
+    });
+    return c.json(result);
+  } catch (err) {
+    return handleApiError(c, err);
+  }
+});
+
+// ── openapi ───────────────────────────────────────────────────────────────────
+
+app.get("/openapi.json", (c) => c.json(openApiSpec));
 
 // ── error helper ──────────────────────────────────────────────────────────────
 

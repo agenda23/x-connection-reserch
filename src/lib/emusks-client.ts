@@ -119,3 +119,33 @@ export async function fetchLocationAutoComplete(query: string): Promise<unknown>
     return res.json();
   });
 }
+
+export async function fetchSearch(
+  query: string,
+  opts: { count: number; cursor?: string },
+): Promise<unknown> {
+  const c = await ensureSession();
+  return serialized(() => {
+    apiCalls++;
+    return c.search.tweets(query, { count: opts.count, cursor: opts.cursor });
+  });
+}
+
+export async function fetchSearchLatest(
+  query: string,
+  opts: { count: number; cursor?: string },
+): Promise<unknown> {
+  const c = await ensureSession();
+  return serialized(() => {
+    apiCalls++;
+    return c.search.latest(query, { count: opts.count, cursor: opts.cursor });
+  });
+}
+
+export async function fetchTrendById(trendId: string): Promise<unknown> {
+  const c = await ensureSession();
+  return serialized(() => {
+    apiCalls++;
+    return c.trends.getById(trendId);
+  });
+}

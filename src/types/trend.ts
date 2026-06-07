@@ -75,6 +75,60 @@ export interface ErrorResponse {
   error: { code: string; message: string };
 }
 
+// ── Phase 2 ───────────────────────────────────────────────────────────────────
+
+export interface TrendDetail {
+  id: string;
+  name: string | null;
+  summary: string | null;
+  postsOverview: string | null;
+  createdAt: string | null;
+  relatedTrends: TrendItem[];
+  _raw?: unknown;
+}
+
+export interface SearchTweet {
+  id: string;
+  text: string;
+  createdAt: string | null;
+  lang: string | null;
+  author: {
+    id: string;
+    username: string;
+    name: string;
+    verified: boolean;
+  };
+  metrics: {
+    likes: number | null;
+    retweets: number | null;
+    replies: number | null;
+    views: number | null;
+  };
+  urls: string[];
+  hashtags: string[];
+}
+
+export interface DetailResponse {
+  ok: true;
+  data: { detail: TrendDetail };
+  meta: { requestedAt: string; apiCalls: number };
+}
+
+export interface SearchResponse {
+  ok: true;
+  data: { tweets: SearchTweet[]; _raw?: unknown };
+  meta: {
+    requestedAt: string;
+    query: string;
+    mode: "top" | "latest";
+    count: number;
+    pages: number;
+    sampled: true;
+    apiCalls: number;
+    nextCursor: string | null;
+  };
+}
+
 export const WOEID_PRESETS: Record<string, number> = {
   worldwide: 1,
   japan: 23424856,

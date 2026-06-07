@@ -2,6 +2,8 @@ import "./config.js";
 import { Command } from "commander";
 import { listTrends } from "./services/trends.js";
 import { listLocations, getSettings } from "./services/locations.js";
+import { searchTweets } from "./services/search.js";
+import { getTrendDetail } from "./services/detail.js";
 import { AppError, EXIT_CODES } from "./lib/errors.js";
 import { WOEID_PRESETS } from "./types/trend.js";
 
@@ -115,6 +117,72 @@ program
               },
             };
         output(out, "json");
+      }
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+// ── search ────────────────────────────────────────────────────────────────────
+
+program
+  .command("search")
+  .description("search tweets for a query (Phase 2, sampled)")
+  .requiredOption("-q, --query <query>", "search query")
+  .option("-m, --mode <mode>", "search mode: top | latest", "top")
+  .option("-n, --count <number>", "max results per page (max 20)", parseInt)
+  .option("--max-pages <number>", "max pages to fetch (max 2)", parseInt)
+  .option("--since <date>", "filter tweets since date (YYYY-MM-DD, within 7 days)")
+  .action(async (opts, cmd) => {
+    const globalOpts = cmd.parent!.opts();
+    try {
+      if (opts.mode !== "top" && opts.mode !== "latest") {
+        throw new AppError("INVALID_PARAMS", `--mode must be "top" or "latest"`);
+      }
+      const result = await searchTweets({
+        query: opts.query,
+        mode: opts.mode as "top" | "latest",
+        count: opts.count,
+        maxPages: opts.maxPages,
+        since: opts.since,
+        raw: globalOpts.raw ?? false,
+      });
+      if (globalOpts.format === "table") {
+        printTable(
+          result.data.tweets.map((t) => ({
+            id: t.id,
+            author: `@${t.author.username}`,
+            text: t.text.slice(0, 60) + (t.text.length > 60 ? "…" : ""),
+            likes: t.metrics.likes ?? "",
+            retweets: t.metrics.retweets ?? "",
+          })),
+        );
+      } else {
+        output(result, "json");
+      }
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+// ── detail ────────────────────────────────────────────────────────────────────
+
+program
+  .command("detail")
+  .description("get AI summary for a trend by ID (Phase 2)")
+  .requiredOption("--id <trendId>", "trend ID (from list output)")
+  .action(async (opts, cmd) => {
+    const globalOpts = cmd.parent!.opts();
+    try {
+      const result = await getTrendDetail(opts.id, globalOpts.raw ?? false);
+      if (globalOpts.format === "table") {
+        const d = result.data.detail;
+        console.log(`id      : ${d.id}`);
+        console.log(`name    : ${d.name ?? "(unknown)"}`);
+        console.log(`summary : ${d.summary ?? "(none)"}`);
+        console.log(`posts   : ${d.postsOverview ?? "(none)"}`);
+      } else {
+        output(result, "json");
       }
     } catch (err) {
       handleError(err);

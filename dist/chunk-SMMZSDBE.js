@@ -200,6 +200,27 @@ async function fetchLocationAutoComplete(query) {
     return res.json();
   });
 }
+async function fetchSearch(query, opts) {
+  const c = await ensureSession();
+  return serialized(() => {
+    apiCalls++;
+    return c.search.tweets(query, { count: opts.count, cursor: opts.cursor });
+  });
+}
+async function fetchSearchLatest(query, opts) {
+  const c = await ensureSession();
+  return serialized(() => {
+    apiCalls++;
+    return c.search.latest(query, { count: opts.count, cursor: opts.cursor });
+  });
+}
+async function fetchTrendById(trendId) {
+  const c = await ensureSession();
+  return serialized(() => {
+    apiCalls++;
+    return c.trends.getById(trendId);
+  });
+}
 
 // src/parsers/explore.ts
 var PARSER_VERSION = "1";
@@ -374,7 +395,7 @@ async function listTrends(params) {
     const loc = settings?.["location"];
     woeid = loc?.["woeid"] != null ? Number(loc["woeid"]) : null;
   }
-  const cacheKey = `trends:${woeid}:${source}:${count}`;
+  const cacheKey = `trends:${woeid}:${source}`;
   const cached = memGet(cacheKey);
   if (cached && !params.diff) {
     return { ...cached, meta: { ...cached.meta, cached: true } };
@@ -531,6 +552,213 @@ async function getSettings() {
   };
 }
 
+// src/parsers/search.ts
+function parseSearchTweets(raw) {
+  try {
+    if (!isRecord2(raw)) return { tweets: [], nextCursor: null };
+    const tweetsArr = Array.isArray(raw["tweets"]) ? raw["tweets"] : [];
+    const tweets = [];
+    for (const item of tweetsArr) {
+      const t = parseTweet(item);
+      if (t) tweets.push(t);
+    }
+    const nextCursor = typeof raw["next_cursor"] === "string" ? raw["next_cursor"] : typeof raw["cursor"] === "string" ? raw["cursor"] : null;
+    return { tweets, nextCursor };
+  } catch {
+    return { tweets: [], nextCursor: null };
+  }
+}
+function parseTweet(item) {
+  if (!isRecord2(item)) return null;
+  const id = typeof item["id"] === "string" ? item["id"] : null;
+  if (!id) return null;
+  const text = typeof item["text"] === "string" ? item["text"] : "";
+  const createdAt = typeof item["created_at"] === "string" ? parseTwitterDate(item["created_at"]) : null;
+  const lang = typeof item["lang"] === "string" ? item["lang"] : null;
+  const user = isRecord2(item["user"]) ? item["user"] : null;
+  const authorId = user && typeof user["id"] === "string" ? user["id"] : "unknown";
+  const username = user && typeof user["username"] === "string" ? user["username"] : "unknown";
+  const name = user && typeof user["name"] === "string" ? user["name"] : username;
+  const verification = user && isRecord2(user["verification"]) ? user["verification"] : null;
+  const verified = verification && verification["verified"] === true || verification && verification["premium_verified"] === true || false;
+  const stats = isRecord2(item["stats"]) ? item["stats"] : {};
+  const metrics = {
+    likes: toInt(stats["likes"]),
+    retweets: toInt(stats["retweets"]),
+    replies: toInt(stats["replies"]),
+    views: toInt(stats["views"])
+  };
+  const rawUrls = Array.isArray(item["urls"]) ? item["urls"] : [];
+  const urls = rawUrls.map(
+    (u) => isRecord2(u) && typeof u["expanded_url"] === "string" ? u["expanded_url"] : null
+  ).filter((u) => u !== null);
+  const rawHashtags = Array.isArray(item["hashtags"]) ? item["hashtags"] : [];
+  const hashtags = rawHashtags.map((h) => {
+    if (isRecord2(h) && typeof h["text"] === "string") return `#${h["text"]}`;
+    if (typeof h === "string") return h.startsWith("#") ? h : `#${h}`;
+    return null;
+  }).filter((h) => h !== null);
+  return {
+    id,
+    text,
+    createdAt,
+    lang,
+    author: { id: authorId, username, name, verified: Boolean(verified) },
+    metrics,
+    urls,
+    hashtags
+  };
+}
+function parseTwitterDate(s) {
+  try {
+    return new Date(s).toISOString();
+  } catch {
+    return null;
+  }
+}
+function toInt(v) {
+  if (typeof v === "number") return Math.round(v);
+  if (typeof v === "string") {
+    const n = parseInt(v, 10);
+    return isNaN(n) ? null : n;
+  }
+  return null;
+}
+function isRecord2(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+// src/services/search.ts
+var MAX_COUNT = 20;
+var MAX_PAGES = 2;
+var MAX_SINCE_DAYS = 7;
+async function searchTweets(params) {
+  const requestedAt = (/* @__PURE__ */ new Date()).toISOString();
+  if (!params.query?.trim()) {
+    throw new AppError("INVALID_PARAMS", "--query is required");
+  }
+  const mode = params.mode ?? "top";
+  const count = Math.min(params.count ?? MAX_COUNT, MAX_COUNT);
+  const maxPages = Math.min(params.maxPages ?? 1, MAX_PAGES);
+  let query = params.query.trim();
+  if (params.since) {
+    const sinceDate = new Date(params.since);
+    if (isNaN(sinceDate.getTime())) {
+      throw new AppError("INVALID_PARAMS", `--since must be a valid date: ${params.since}`);
+    }
+    const diffDays = (Date.now() - sinceDate.getTime()) / 864e5;
+    if (diffDays > MAX_SINCE_DAYS) {
+      throw new AppError("INVALID_PARAMS", `--since must be within the last ${MAX_SINCE_DAYS} days`);
+    }
+    query += ` since:${sinceDate.toISOString().slice(0, 10)}`;
+  }
+  const cacheKey = `search:${mode}:${query}:${count}`;
+  const cached = memGet(cacheKey);
+  if (cached) return cached;
+  resetApiCallCount();
+  const fetchFn = mode === "latest" ? fetchSearchLatest : fetchSearch;
+  const allTweets = [];
+  let nextCursor = null;
+  let currentCursor = void 0;
+  let pages = 0;
+  let rawPages = [];
+  for (let page = 0; page < maxPages; page++) {
+    const raw = await fetchFn(query, { count, cursor: currentCursor });
+    pages++;
+    if (params.raw) rawPages.push(raw);
+    const { tweets, nextCursor: nc } = parseSearchTweets(raw);
+    allTweets.push(...tweets);
+    nextCursor = nc;
+    if (!nc || tweets.length === 0) break;
+    currentCursor = nc;
+  }
+  const apiCalls2 = getApiCallCount();
+  const response = {
+    ok: true,
+    data: {
+      tweets: allTweets,
+      ...params.raw && { _raw: rawPages.length === 1 ? rawPages[0] : rawPages }
+    },
+    meta: {
+      requestedAt,
+      query: params.query,
+      mode,
+      count: allTweets.length,
+      pages,
+      sampled: true,
+      apiCalls: apiCalls2,
+      nextCursor
+    }
+  };
+  memSet(cacheKey, response, config.searchCacheTtlSeconds);
+  return response;
+}
+
+// src/parsers/detail.ts
+function parseTrendDetail(raw, id) {
+  if (!isRecord3(raw)) {
+    return { id, name: null, summary: null, postsOverview: null, createdAt: null, relatedTrends: [] };
+  }
+  const trend = findTrendObject(raw);
+  const name = trend ? getString(trend, ["name"]) : null;
+  const summary = trend ? getString(trend, ["trend_metadata", "meta_description"]) ?? getString(trend, ["summary"]) ?? getString(trend, ["description"]) : null;
+  const postsOverview = trend ? getString(trend, ["social_context", "text"]) : null;
+  const createdAt = trend ? getString(trend, ["created_at"]) : null;
+  return { id, name, summary, postsOverview, createdAt, relatedTrends: [] };
+}
+function findTrendObject(val, depth = 0) {
+  if (depth > 12 || !isRecord3(val)) return null;
+  if (typeof val["name"] === "string" && val["name"] && ("trend_metadata" in val || "trend_url" in val || "social_context" in val)) {
+    return val;
+  }
+  for (const child of Object.values(val)) {
+    const found = findTrendObject(child, depth + 1);
+    if (found) return found;
+  }
+  return null;
+}
+function getString(obj, path) {
+  let cur = obj;
+  for (const key of path) {
+    if (!isRecord3(cur)) return null;
+    cur = cur[key];
+  }
+  return typeof cur === "string" && cur ? cur : null;
+}
+function isRecord3(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+// src/services/detail.ts
+async function getTrendDetail(id, raw) {
+  const requestedAt = (/* @__PURE__ */ new Date()).toISOString();
+  if (!id?.trim()) {
+    throw new AppError("INVALID_PARAMS", "--id is required");
+  }
+  resetApiCallCount();
+  let rawData;
+  try {
+    rawData = await fetchTrendById(id);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.toLowerCase().includes("rate") || msg.includes("429")) {
+      throw new AppError("RATE_LIMITED", `Rate limited: ${msg}`);
+    }
+    if (msg.toLowerCase().includes("auth") || msg.includes("401")) {
+      throw new AppError("AUTH_FAILED", `Auth error: ${msg}`);
+    }
+    throw new AppError("INVALID_PARAMS", `Could not fetch trend "${id}": ${msg}`);
+  }
+  const apiCalls2 = getApiCallCount();
+  const detail = parseTrendDetail(rawData, id);
+  if (raw) detail._raw = rawData;
+  return {
+    ok: true,
+    data: { detail },
+    meta: { requestedAt, apiCalls: apiCalls2 }
+  };
+}
+
 export {
   config,
   EXIT_CODES,
@@ -539,5 +767,7 @@ export {
   WOEID_PRESETS,
   listTrends,
   listLocations,
-  getSettings
+  getSettings,
+  searchTweets,
+  getTrendDetail
 };
