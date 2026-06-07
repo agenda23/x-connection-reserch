@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# twitter-cli (clone separately; see README)
+twitter-cli/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
