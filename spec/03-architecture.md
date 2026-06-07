@@ -15,7 +15,7 @@
 │              x-trends-app（本アプリケーション）               │
 │  ┌─────────────┐  ┌──────────────┐  ┌──────────────────┐  │
 │  │ CLI Layer   │  │ HTTP Server  │  │ Config / Logger  │  │
-│  │ (commander) │  │ (Hono/Express)│  │                  │  │
+│  │ (commander) │  │    (Hono)     │  │                  │  │
 │  └──────┬──────┘  └──────┬───────┘  └──────────────────┘  │
 │         │                │                                   │
 │         └────────┬───────┘                                   │
@@ -51,7 +51,7 @@
 | 言語 | TypeScript 5.x | 型安全・emusks 連携の補完 |
 | ランタイム | Node.js 20+ | emusks ESM 互換 |
 | パッケージ管理 | pnpm | 既存構成と一致 |
-| CLI | commander または citty | サブコマンド・ヘルプ生成 |
+| CLI | commander | サブコマンド・ヘルプ生成 |
 | HTTP サーバー | Hono | 軽量・TypeScript 親和性・n8n 向け JSON API に適する |
 | バリデーション | zod | リクエスト/レスポンススキーマ検証 |
 | 環境変数 | dotenv | `.env` の起動時自動読み込み（`override: true`） |
@@ -68,7 +68,7 @@ twitter-cli-test/
 │   ├── config.ts            # .env 自動読み込み・設定解決
 │   ├── lib/
 │   │   ├── emusks-client.ts # emusks ラッパー（シングルトンセッション）
-│   │   ├── cache.ts         # メモリキャッシュ・diff 用前回スナップショット
+│   │   ├── cache.ts         # メモリキャッシュ・diff 用スナップショット（CLI 時はファイル永続化 ~/.cache/x-trends/）
 │   │   ├── rate-limiter.ts  # 直列化・REQUEST_DELAY_MS
 │   │   └── errors.ts        # エラーコード定義
 │   ├── parsers/
@@ -140,6 +140,7 @@ config.ts が import される
 - **直列実行**と `REQUEST_DELAY_MS` による呼び出し間隔制御（並列禁止）
 - 429 / ロック検知時はリトライせず即 `RATE_LIMITED`
 - `woeid` 変更時のみ `setExploreSettings` を 1 回呼ぶ
+- `woeid` 未指定時は `exploreSettings()` で現在地域を解決（+1 API 呼び出し）
 - `apiCalls` カウンタをメタ情報に返す
 
 ```ts
@@ -166,6 +167,7 @@ class EmusksClient {
 - ビジネスロジック（地域切り替え → 取得 → 正規化）
 - キャッシュ制御（キー: `trends:{woeid}:{source}:{count}`）
 - ページネーション cursor の透過的返却
+- diff スナップショット保存先: CLI 単発実行は **ファイル**（`~/.cache/x-trends/snapshot-{cacheKey}.json`）、HTTP サーバーはメモリ。CLI でメモリのみにすると単発実行のたびに消えて `--diff` が機能しない
 
 ```ts
 class TrendsService {
@@ -220,6 +222,8 @@ TrendsService.listTrends({ woeid: 23424856 })
     │
     ├─► EmusksClient.ensureSession()
     │
+    ├─► woeid 未指定? → client.trends.exploreSettings() で現在地域を取得（+1 API 呼び出し）
+    │
     ├─► EmusksClient.setLocation(23424856)  ※ currentWoeid と異なる場合のみ
     │       └─► client.trends.setExploreSettings({ location: { woeid } })
     │
@@ -233,6 +237,8 @@ TrendsService.listTrends({ woeid: 23424856 })
     │
     └─► TrendListResponse（meta.apiCalls 付き）
 ```
+
+> **merge source 時の待機コスト:** setExploreSettings → [REQUEST_DELAY_MS] → explore → [REQUEST_DELAY_MS] → exploreSidebar の順で直列実行されるため、デフォルト設定（3 秒）では最低 **6 秒** の待機が発生する。タイムアウトを設ける場合は 15 秒以上を推奨。
 
 ### 5.2 n8n 連携パターン
 

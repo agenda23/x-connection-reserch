@@ -1,91 +1,120 @@
-# ++**[x-connection-reserch](https://github.com/agenda23/x-connection-reserch)**++
+# x-trends-app
 
-[twitter-cli](https://github.com/jackwener/twitter-cli) と [emusks](https://emusks.tiago.zip) を検証・利用するためのワークスペースです。
+emusks を使って X（Twitter）のトレンドを **公式 API キーなし** で取得する CLI ツールです。プロモーション除外・地域指定・差分検知を標準搭載します。
+
+> **ステータス:** 仕様策定済み・実装前。`src/` はまだ存在しません。
 
 ## 構成
 
 ```
 twitter-cli-test/
-├── .env.example          # TWITTER_AUTH_TOKEN のテンプレート（本アプリは自動読み込み）
-├── TWITTER-CLI-SPEC.md   # twitter-cli 動作仕様（日本語）
+├── .env.example          # TWITTER_AUTH_TOKEN のテンプレート
 ├── package.json          # Node.js 依存（emusks）
-└── twitter-cli/          # 別途 clone（git 管理外）
+├── spec/                 # x-trends-app 仕様ドキュメント
+└── twitter-cli/          # 参考ツール（別途 clone・git 管理外）
 ```
 
 ## セットアップ
 
-### 1. リポジトリのクローン
-
 ```bash
+# 1. このリポジトリをクローン
 git clone <this-repo-url>
 cd twitter-cli-test
-```
 
-### 2. twitter-cli の取得
-
-`twitter-cli/` は `.gitignore` に含まれているため、手動で clone してください。
-
-```bash
-git clone https://github.com/jackwener/twitter-cli.git twitter-cli
-cd twitter-cli
-uv sync
-```
-
-### 3. Node.js 依存のインストール
-
-```bash
+# 2. 依存をインストール
 pnpm install
-```
 
-### 4. 認証情報の設定
-
-```bash
+# 3. 認証情報を設定
 cp .env.example .env
-# .env に TWITTER_AUTH_TOKEN を記入
+# .env を開き TWITTER_AUTH_TOKEN を記入
+# （x.com にログイン後 DevTools → Application → Cookies → auth_token）
 ```
 
-**x-trends-app（emusks）** は起動時にルート `.env` を自動読み込みし、`TWITTER_AUTH_TOKEN` を最優先で使用します。手動 `export` は不要です。
+`.env` は起動時に自動読み込みされます（`dotenv` `override: true`）。手動 `export` は不要です。
 
-**twitter-cli** は `.env` を自動読み込みしません。利用前に環境変数へ export してください。
+## CLI の使い方（Phase 1 実装後）
 
 ```bash
-set -a && source .env && set +a
+# 日本のトレンドを取得（プロモーション自動除外）
+pnpm x-trends list --woeid 23424856
+
+# プリセット指定・表形式で表示
+pnpm x-trends list --preset japan --format table
+
+# explore + sidebar をマージして取得し、前回との差分も表示
+pnpm x-trends list --preset japan --source merge --diff
+
+# 利用可能な地域一覧
+pnpm x-trends locations
+
+# 地域名で WOEID を調べる
+pnpm x-trends locations --search Tokyo
+
+# 現在の Explore 設定を確認
+pnpm x-trends settings
+
+# HTTP サーバーを起動（n8n 連携用）
+pnpm x-trends serve --port 3920
 ```
 
-## 使い方
+### グローバルオプション
 
-### twitter-cli
+| オプション | デフォルト | 説明 |
+|-----------|-----------|------|
+| `--format` / `-f` | `json` | `json` \| `table` |
+| `--raw` | false | emusks 生レスポンスを出力 |
+| `--verbose` / `-v` | false | デバッグログを表示 |
+
+### WOEID プリセット
+
+| preset | 地域 |
+|--------|------|
+| `worldwide` | 全世界 |
+| `japan` | 日本 |
+| `us` | 米国 |
+| `uk` | 英国 |
+| `tokyo` | 東京 |
+
+## 参考ツール: twitter-cli
+
+Python 製の X 操作 CLI です。emusks との比較・動作検証に使用します。
 
 ```bash
-cd twitter-cli
+# 別途クローンが必要（git 管理外）
+git clone https://github.com/jackwener/twitter-cli.git twitter-cli
+cd twitter-cli && uv sync
+
+# .env を手動で読み込む（自動読み込みなし）
+set -a && source ../.env && set +a
+
 uv run twitter feed --max 10
 uv run twitter -v whoami
 ```
 
-詳細は [TWITTER-CLI-SPEC.md](./TWITTER-CLI-SPEC.md) を参照してください。
+詳細は [`spec/ref/TWITTER-CLI-SPEC.md`](./spec/ref/TWITTER-CLI-SPEC.md) を参照してください。
 
-### x-trends-app（emusks・開発予定）
+## 仕様ドキュメント
 
-仕様は [spec/](./spec/) を参照。
+[`spec/`](./spec/) に設計・要件・API 仕様をまとめています。
 
-- トレンド取得を中心に、プロモーション除外・地域指定・差分検知を提供
-- 認証は `.env` の `TWITTER_AUTH_TOKEN` のみ（`ct0` 不要）
-- ユーザー API・大量取得は対象外。軽量検索は Phase 2 オプション
-
-### emusks（直接利用）
-
-```bash
-node -e "const { Emusks } = require('emusks'); console.log(Emusks);"
-```
+| ファイル | 内容 |
+|---------|------|
+| [spec/02-requirements.md](./spec/02-requirements.md) | 要件・スコープ・フェーズ |
+| [spec/03-architecture.md](./spec/03-architecture.md) | システム構成・負荷制御 |
+| [spec/04-api-spec.md](./spec/04-api-spec.md) | CLI コマンド・HTTP API |
+| [spec/05-data-schema.md](./spec/05-data-schema.md) | データ型・Zod スキーマ |
 
 ## セキュリティ
 
-- `.env` やブラウザ Cookie の `auth_token` はログインセッション相当です
-- 認証情報を Git にコミットしないでください
-- トークン漏洩時は x.com でログアウト・再ログインして無効化してください
+- `auth_token` はログインセッションと同等です。`.env` は Git にコミットしないでください
+- 漏洩時は x.com でログアウト・再ログインしてトークンを無効化してください
+- 本番運用では専用サブアカウントの使用を推奨します（`spec/01-emusks-research.md` 参照）
+
+## ライセンス
+
+emusks は **AGPL-3.0-only** です。ネットワーク経由で提供する場合はソース公開義務が生じる可能性があります。
 
 ## 参考リンク
 
-- [twitter-cli](https://github.com/jackwener/twitter-cli)
 - [emusks](https://emusks.tiago.zip)
-
+- [twitter-cli](https://github.com/jackwener/twitter-cli)

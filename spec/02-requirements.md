@@ -108,11 +108,12 @@ x-trends detail --id <trend_id>
 |----|------|
 | FR-02-1 | `explore` / `exploreSidebar` / **`merge`**（両方取得し名前で重複除去）から一覧を取得 |
 | FR-02-2 | `woeid` 指定時は `setExploreSettings` で地域切り替え後に取得（変更時のみ 1 回） |
-| FR-02-3 | `count` 指定（デフォルト 20、上限 50）。**深いページネーションは Phase 1 では 1 ページまで** |
+| FR-02-3 | `count` 指定（デフォルト 20、上限 50）。51 以上はバリデーションエラー（CLI exit 1 / HTTP 400 `INVALID_PARAMS`）。**深いページネーションは Phase 1 では 1 ページまで** |
 | FR-02-4 | 生 GraphQL を正規化スキーマへ変換 |
 | FR-02-5 | `--exclude-promoted`（デフォルト **true**）で `category: promoted` を除外 |
-| FR-02-6 | `--categories` で `trending,event,topic` 等を明示フィルタ可能 |
+| FR-02-6 | `--categories` で `trending,event,topic` 等を明示フィルタ可能（未知のカテゴリ名はエラーにならず 0 件扱い。`meta.categories` には指定値をそのまま返す） |
 | FR-02-7 | `--diff` で前回キャッシュとの差分（`new`, `dropped`, `rankChanged`）を `data.changes` に付与 |
+| FR-02-8 | CLI 単発実行での `--diff` はスナップショットをファイルに永続化する（`~/.cache/x-trends/snapshot-{cacheKey}.json`）。メモリキャッシュのみでは単発実行ごとに消えるため機能しない |
 
 **1 回の `list` における X API 呼び出し上限:**
 
@@ -127,9 +128,10 @@ x-trends detail --id <trend_id>
 | ID | 要件 |
 |----|------|
 | FR-03-1 | `trends.available()` で地点一覧 |
-| FR-03-2 | `guide/explore_locations_with_auto_complete` で地点名検索 |
+| FR-03-2 | `guide/explore_locations_with_auto_complete` で地点名検索（実装前に動作確認必須。フォールバック: `available()` 取得後にクライアント側で名前部分一致フィルタ） |
 | FR-03-3 | `exploreSettings()` で現在地域を取得 |
 | FR-03-4 | WOEID プリセット内蔵 |
+| FR-03-5 | `--woeid` / `--preset` をともに省略した場合、`exploreSettings()` で現在地域を解決する（+1 API 呼び出し）。解決した WOEID を `meta.woeid` に返す |
 
 **WOEID プリセット:**
 
@@ -177,7 +179,7 @@ x-trends detail --id <trend_id>
 | FR-07-1 | REST API（デフォルト `localhost:3920`） |
 | FR-07-2 | Phase 1: `/health`, `/api/v1/trends`, `/api/v1/locations`, `/api/v1/settings` |
 | FR-07-3 | Phase 2: `/api/v1/trends/:id`（detail）, `/api/v1/search` |
-| FR-07-4 | OpenAPI 3.0 を `/openapi.json` で配信 |
+| FR-07-4 | OpenAPI 3.0 を `/openapi.json` で配信（**Phase 2 で実装**） |
 | FR-07-5 | `X-API-Key` 認証（オプション） |
 
 ### FR-08: 設定

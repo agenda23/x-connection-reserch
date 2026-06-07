@@ -102,6 +102,8 @@ interface TrendListResponse {
     count: number;
     cached: boolean;
     cacheExpiresAt: string | null;
+    cursor: string | null;        // 現在ページカーソル（emusks から受け取った値）
+    nextCursor: string | null;    // 次ページカーソル（Phase 1 は通常 null）
     apiCalls: number;             // 今回の emusks 呼び出し回数
     parserVersion: string;
     partial: boolean;
@@ -146,7 +148,7 @@ interface LocationItem {
 
 `detail` / `GET /api/v1/trends/:trendId`。**明示指定時のみ** 1 件取得。
 
-`client.trends.getById()` の GraphQL レスポンスを正規化。
+`client.trends.getById()` の GraphQL レスポンスを正規化。`TrendItem.id` が `null` のトレンドは `detail --id` で参照できない（`INVALID_TREND_ID` エラー、exit 1 / HTTP 400）。
 
 ```ts
 interface TrendDetail {
@@ -201,6 +203,25 @@ interface ExploreSettings {
   } | null;
   raw: unknown;   // v2 get_explore_settings の生 JSON
 }
+
+### SettingsResponse
+
+`settings` / `GET /api/v1/settings` のレスポンスエンベロープ:
+
+```ts
+interface SettingsResponse {
+  ok: true;
+  data: {
+    settings: ExploreSettings;
+  };
+  meta: {
+    requestedAt: string;
+    apiCalls: number;
+  };
+}
+```
+
+`--format table` 時は `data.settings.location.name` と `data.settings.location.woeid` のみ表示し、`raw` フィールドは省略する。
 ```
 
 ## 8. パーサー実装ガイド
@@ -285,14 +306,16 @@ export const TrendListResponseSchema = z.object({
   meta: z.object({
     requestedAt: z.string().datetime(),
     woeid: z.number().nullable(),
+    preset: z.string().nullable(),
     source: z.enum(["explore", "sidebar", "merge"]),
     excludePromoted: z.boolean(),
-    apiCalls: z.number().int().nonnegative(),
+    categories: z.array(z.string()).nullable(),
     count: z.number(),
-    cursor: z.string().nullable(),
-    nextCursor: z.string().nullable(),
     cached: z.boolean(),
     cacheExpiresAt: z.string().datetime().nullable(),
+    cursor: z.string().nullable(),
+    nextCursor: z.string().nullable(),
+    apiCalls: z.number().int().nonnegative(),
     parserVersion: z.string(),
     partial: z.boolean(),
   }),

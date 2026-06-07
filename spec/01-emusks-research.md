@@ -185,7 +185,8 @@ const res = await client.v2("guide/explore_locations_with_auto_complete", {
 
 | 名前空間 | メソッド | 用途 |
 |---------|---------|------|
-| `search.tweets(query)` | GraphQL SearchTimeline | トレンド名・ハッシュタグで投稿検索 |
+| `search.tweets(query)` | GraphQL SearchTimeline | トップツイート検索（product: Top） |
+| `search.latest(query)` | GraphQL SearchTimeline | 最新順ツイート検索（product: Latest） |
 | `search.typeahead(query)` | v1.1 search/typeahead | イベント・トピックのオートコンプリート |
 | `topics.landingPage(topicId)` | GraphQL TopicLandingPage | トピック別ランディング |
 | `client.v2("guide")` | v2 guide.json | Guide タイムライン（未検証、生 API） |

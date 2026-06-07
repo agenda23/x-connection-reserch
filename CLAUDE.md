@@ -40,7 +40,9 @@ uv run twitter -v whoami
 
 ## Architecture (x-trends-app)
 
-**Tech stack:** TypeScript 5.x, Node.js 20+, pnpm, Commander/Citty (CLI), Hono (HTTP), Zod (validation), dotenv, tsx (dev), tsup (prod)
+**Primary interface:** CLI (`x-trends <command>`)。HTTP server (`serve`) は n8n 連携向けのサブ用途。
+
+**Tech stack:** TypeScript 5.x, Node.js 20+, pnpm, **commander** (CLI), **Hono** (HTTP), Zod (validation), dotenv, tsx (dev), tsup (prod)
 
 **Planned `src/` layout:**
 ```

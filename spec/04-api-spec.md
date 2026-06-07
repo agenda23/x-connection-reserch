@@ -81,6 +81,13 @@ x-trends list [options]
 | `--diff` | — | false | 前回キャッシュとの差分を `data.changes` に含める |
 | `--cursor` | — | — | ページネーション（Phase 1 は 1 ページ推奨） |
 
+**バリデーション・注意事項:**
+
+- `--count` に 51 以上を指定すると `INVALID_PARAMS`（exit 1 / HTTP 400）
+- `--categories` に未知のカテゴリ名を指定してもエラーにならず 0 件扱い（`meta.categories` には指定値をそのまま返す）
+- `--woeid` / `--preset` をともに省略した場合、`exploreSettings()` で現在地域を解決する（+1 API 呼び出し）
+- `source=merge` では `REQUEST_DELAY_MS` が 2 回挟まり、デフォルト設定（3 秒）で最低 **6 秒** の待機が発生する
+
 **例:**
 
 ```bash
@@ -152,6 +159,13 @@ x-trends search --query <query> [options]
 
 `meta.sampled: true` を常に付与。
 
+`--mode` と emusks メソッドのマッピング:
+
+| mode | emusks メソッド |
+|------|----------------|
+| `top` | `search.tweets(query, opts)` |
+| `latest` | `search.latest(query, opts)` |
+
 ### 2.7 コマンド: `detail`（Phase 2・オプション）
 
 単一トレンドの AI サマリー。**明示指定時のみ** 1 API 呼び出し。
@@ -187,7 +201,11 @@ x-trends serve [--port 3920] [--host 0.0.0.0]
 
 ### 3.1 `GET /health`
 
-認証不要。
+認証不要。レスポンス:
+
+```json
+{ "ok": true, "status": "healthy" }
+```
 
 ### 3.2 `GET /api/v1/trends`（Phase 1）
 
@@ -259,6 +277,8 @@ AI サマリー。1 件あたり 1 emusks 呼び出し。
 | `uk` | 23424975 |
 | `tokyo` | 1118370 |
 
-## 7. OpenAPI
+## 7. OpenAPI（**Phase 2**）
 
-タグ: `trends`（Phase 1）, `search` / `detail`（Phase 2）, `system`
+`/openapi.json` で OpenAPI 3.0 仕様を配信する。Phase 1 MVP には含まない。
+
+タグ: `trends` / `system`（Phase 1 相当）, `search` / `detail`（Phase 2 相当）
