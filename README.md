@@ -1,4 +1,4 @@
-# twitter-cli-test
+# ++**[x-connection-reserch](https://github.com/agenda23/x-connection-reserch)**++
 
 [twitter-cli](https://github.com/jackwener/twitter-cli) と [emusks](https://emusks.tiago.zip) を検証・利用するためのワークスペースです。
 
@@ -6,7 +6,7 @@
 
 ```
 twitter-cli-test/
-├── .env.example          # 認証トークンのテンプレート
+├── .env.example          # TWITTER_AUTH_TOKEN のテンプレート（本アプリは自動読み込み）
 ├── TWITTER-CLI-SPEC.md   # twitter-cli 動作仕様（日本語）
 ├── package.json          # Node.js 依存（emusks）
 └── twitter-cli/          # 別途 clone（git 管理外）
@@ -41,10 +41,12 @@ pnpm install
 
 ```bash
 cp .env.example .env
-# .env に TWITTER_AUTH_TOKEN と TWITTER_CT0 を記入
+# .env に TWITTER_AUTH_TOKEN を記入
 ```
 
-twitter-cli は `.env` を自動読み込みしません。利用前に環境変数へ export してください。
+**x-trends-app（emusks）** は起動時にルート `.env` を自動読み込みし、`TWITTER_AUTH_TOKEN` を最優先で使用します。手動 `export` は不要です。
+
+**twitter-cli** は `.env` を自動読み込みしません。利用前に環境変数へ export してください。
 
 ```bash
 set -a && source .env && set +a
@@ -62,7 +64,11 @@ uv run twitter -v whoami
 
 詳細は [TWITTER-CLI-SPEC.md](./TWITTER-CLI-SPEC.md) を参照してください。
 
-### emusks
+### x-trends-app（emusks・開発予定）
+
+仕様は [spec/](./spec/) を参照。認証は `.env` の `TWITTER_AUTH_TOKEN` のみ（`ct0` 不要）。
+
+### emusks（直接利用）
 
 ```bash
 node -e "const { Emusks } = require('emusks'); console.log(Emusks);"
@@ -78,3 +84,4 @@ node -e "const { Emusks } = require('emusks'); console.log(Emusks);"
 
 - [twitter-cli](https://github.com/jackwener/twitter-cli)
 - [emusks](https://emusks.tiago.zip)
+
