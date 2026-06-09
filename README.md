@@ -9,10 +9,14 @@ emusks を使って X（Twitter）のトレンドを **公式 API キーなし**
 ```bash
 pnpm install
 cp .env.example .env
-# .env を開き TWITTER_AUTH_TOKEN を記入
+# .env を開き TWITTER_AUTH_TOKEN を記入（ローカル開発向け）
 ```
 
 `auth_token` は x.com にログイン後、DevTools → Application → Cookies → `auth_token` で確認できます。
+
+**認証の優先順位（高→低）:** `process.env` → `~/.config/x-trends/.env`（または `DOTENV_PATH`）→ カレントの `.env` → パッケージルート `.env`
+
+グローバルインストール時は `export TWITTER_AUTH_TOKEN=...` または `~/.config/x-trends/.env` を推奨します。
 
 ## CLI クイックスタート
 
@@ -33,7 +37,10 @@ pnpm x-trends locations --search Tokyo
 pnpm x-trends serve
 ```
 
-詳細は **[docs/user-manual.md](./docs/user-manual.md)** を参照してください。
+詳細は以下を参照してください。
+
+- **[docs/local-setup.md](./docs/local-setup.md)** — この Mac 向けセットアップ・CLI リファレンス
+- **[docs/user-manual.md](./docs/user-manual.md)** — HTTP API・n8n・全般リファレンス
 
 ## ビルド
 
@@ -96,3 +103,4 @@ emusks は **AGPL-3.0-only** です。ネットワーク経由で提供する場
 - [emusks](https://emusks.tiago.zip)
 - [仕様ドキュメント](./spec/)
 - [ユーザーマニュアル](./docs/user-manual.md)
+- [ローカル PC 利用ガイド](./docs/local-setup.md)

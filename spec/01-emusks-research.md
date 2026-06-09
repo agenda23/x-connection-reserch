@@ -60,7 +60,7 @@ await client.login({ auth_token: "...", client: "web", proxy: "..." });
 
 - `auth_token` の長さは 20〜50 文字（それ以外はエラー）
 - emusks は **`ct0` を自動取得**するため、呼び出し側は `auth_token` のみ渡せばよい
-- 本プロジェクトはルート `.env` の `TWITTER_AUTH_TOKEN` を起動時に **自動読み込み・最優先** で使用（`TWITTER_CT0` は emusks では不要。twitter-cli 用として共存可）
+- 本プロジェクトは `TWITTER_AUTH_TOKEN` を起動時に **自動読み込み** する（`process.env` 最優先、`.env` フォールバック。`TWITTER_CT0` は emusks では不要。twitter-cli 用として共存可）
 
 ### 3.2 パスワードログイン
 

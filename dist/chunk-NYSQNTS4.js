@@ -1,52 +1,19 @@
 #!/usr/bin/env node
-
-// src/config.ts
-import { config as loadEnv } from "dotenv";
-import { resolve } from "path";
-import { fileURLToPath } from "url";
-var repoRoot = resolve(fileURLToPath(import.meta.url), "../../..");
-var envPath = process.env.DOTENV_PATH ?? resolve(repoRoot, ".env");
-loadEnv({ path: envPath, override: true });
-var config = {
-  twitterAuthToken: process.env.TWITTER_AUTH_TOKEN ?? "",
-  apiKey: process.env.API_KEY ?? "",
-  port: Number(process.env.PORT ?? 3920),
-  emusksClient: process.env.EMUSKS_CLIENT ?? "web",
-  cacheTtlSeconds: Number(process.env.CACHE_TTL_SECONDS ?? 300),
-  searchCacheTtlSeconds: Number(process.env.SEARCH_CACHE_TTL_SECONDS ?? 900),
-  requestDelayMs: Number(process.env.REQUEST_DELAY_MS ?? 3e3),
-  logLevel: process.env.LOG_LEVEL ?? "info"
-};
-
-// src/lib/errors.ts
-var EXIT_CODES = {
-  AUTH_REQUIRED: 2,
-  AUTH_FAILED: 2,
-  RATE_LIMITED: 3,
-  INVALID_WOEID: 1,
-  INVALID_PARAMS: 1,
-  INVALID_TREND_ID: 1,
-  PARSE_ERROR: 1,
-  UPSTREAM_ERROR: 1
-};
-var HTTP_STATUS = {
-  AUTH_REQUIRED: 401,
-  AUTH_FAILED: 401,
-  RATE_LIMITED: 429,
-  INVALID_WOEID: 400,
-  INVALID_PARAMS: 400,
-  INVALID_TREND_ID: 400,
-  PARSE_ERROR: 502,
-  UPSTREAM_ERROR: 502
-};
-var AppError = class extends Error {
-  constructor(code, message) {
-    super(message);
-    this.code = code;
-    this.name = "AppError";
-  }
-  code;
-};
+import {
+  AppError,
+  config,
+  fetchAvailableLocations,
+  fetchExplore,
+  fetchExploreSidebar,
+  fetchLocationAutoComplete,
+  fetchSearch,
+  fetchSearchLatest,
+  fetchTrendById,
+  getApiCallCount,
+  getExploreSettings,
+  resetApiCallCount,
+  setLocation
+} from "./chunk-AOWFVCNZ.js";
 
 // src/types/trend.ts
 var WOEID_PRESETS = {
@@ -59,7 +26,7 @@ var WOEID_PRESETS = {
 
 // src/lib/cache.ts
 import { readFileSync, writeFileSync, mkdirSync } from "fs";
-import { resolve as resolve2 } from "path";
+import { resolve } from "path";
 import { homedir } from "os";
 var memoryCache = /* @__PURE__ */ new Map();
 function memGet(key) {
@@ -73,10 +40,10 @@ function memGet(key) {
 function memSet(key, value, ttlSeconds) {
   memoryCache.set(key, { value, expiresAt: Date.now() + ttlSeconds * 1e3 });
 }
-var snapshotDir = resolve2(homedir(), ".cache", "x-trends");
+var snapshotDir = resolve(homedir(), ".cache", "x-trends");
 function snapshotPath(cacheKey) {
   const safe = cacheKey.replace(/[^a-zA-Z0-9_-]/g, "_");
-  return resolve2(snapshotDir, `snapshot-${safe}.json`);
+  return resolve(snapshotDir, `snapshot-${safe}.json`);
 }
 function readSnapshot(cacheKey) {
   try {
@@ -92,134 +59,6 @@ function writeSnapshot(cacheKey, value) {
     writeFileSync(snapshotPath(cacheKey), JSON.stringify(value), "utf8");
   } catch {
   }
-}
-
-// src/lib/rate-limiter.ts
-var queue = Promise.resolve();
-function serialized(fn) {
-  const next = queue.then(fn);
-  queue = next.then(
-    () => delay(config.requestDelayMs),
-    () => delay(config.requestDelayMs)
-  );
-  return next;
-}
-function delay(ms) {
-  return new Promise((resolve3) => setTimeout(resolve3, ms));
-}
-
-// src/lib/emusks-client.ts
-var client = null;
-var currentWoeid = null;
-var apiCalls = 0;
-function resetApiCallCount() {
-  apiCalls = 0;
-}
-function getApiCallCount() {
-  return apiCalls;
-}
-async function ensureSession() {
-  if (client) return client;
-  if (!config.twitterAuthToken) {
-    throw new AppError("AUTH_REQUIRED", "TWITTER_AUTH_TOKEN is not set");
-  }
-  const { default: Emusks } = await import("emusks");
-  const instance = new Emusks();
-  try {
-    await serialized(() => {
-      apiCalls++;
-      return instance.login({
-        auth_token: config.twitterAuthToken,
-        client: config.emusksClient
-      });
-    });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.toLowerCase().includes("rate") || msg.includes("429")) {
-      throw new AppError("RATE_LIMITED", `Rate limited during login: ${msg}`);
-    }
-    throw new AppError("AUTH_FAILED", `Login failed: ${msg}`);
-  }
-  client = instance;
-  return client;
-}
-async function getExploreSettings() {
-  const c = await ensureSession();
-  return serialized(() => {
-    apiCalls++;
-    return c.trends.exploreSettings();
-  });
-}
-async function setLocation(woeid) {
-  if (currentWoeid === woeid) return;
-  const c = await ensureSession();
-  try {
-    await serialized(() => {
-      apiCalls++;
-      return c.trends.setExploreSettings({ location: { woeid } });
-    });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.toLowerCase().includes("rate") || msg.includes("429")) {
-      throw new AppError("RATE_LIMITED", `Rate limited: ${msg}`);
-    }
-    if (msg.toLowerCase().includes("auth") || msg.includes("401")) {
-      throw new AppError("AUTH_FAILED", `Auth error: ${msg}`);
-    }
-  }
-  currentWoeid = woeid;
-}
-async function fetchExplore(opts) {
-  const c = await ensureSession();
-  return serialized(() => {
-    apiCalls++;
-    return c.trends.explore({ count: opts.count, cursor: opts.cursor });
-  });
-}
-async function fetchExploreSidebar(opts) {
-  const c = await ensureSession();
-  return serialized(() => {
-    apiCalls++;
-    return c.trends.exploreSidebar({ count: opts.count, cursor: opts.cursor });
-  });
-}
-async function fetchAvailableLocations() {
-  const c = await ensureSession();
-  return serialized(() => {
-    apiCalls++;
-    return c.trends.available();
-  });
-}
-async function fetchLocationAutoComplete(query) {
-  const c = await ensureSession();
-  return serialized(async () => {
-    apiCalls++;
-    const res = await c.v2("guide/explore_locations_with_auto_complete", {
-      params: { q: query }
-    });
-    return res.json();
-  });
-}
-async function fetchSearch(query, opts) {
-  const c = await ensureSession();
-  return serialized(() => {
-    apiCalls++;
-    return c.search.tweets(query, { count: opts.count, cursor: opts.cursor });
-  });
-}
-async function fetchSearchLatest(query, opts) {
-  const c = await ensureSession();
-  return serialized(() => {
-    apiCalls++;
-    return c.search.latest(query, { count: opts.count, cursor: opts.cursor });
-  });
-}
-async function fetchTrendById(trendId) {
-  const c = await ensureSession();
-  return serialized(() => {
-    apiCalls++;
-    return c.trends.getById(trendId);
-  });
 }
 
 // src/parsers/explore.ts
@@ -409,7 +248,7 @@ async function listTrends(params) {
   if (source === "sidebar" || source === "merge") {
     sidebarRaw = await fetchExploreSidebar({ count, cursor: params.cursor });
   }
-  const apiCalls2 = getApiCallCount();
+  const apiCalls = getApiCallCount();
   const exploreResult = exploreRaw ? parseExploreTrends(exploreRaw) : { trends: [], cursor: null, nextCursor: null, partial: false };
   const sidebarResult = sidebarRaw ? parseExploreTrends(sidebarRaw) : { trends: [], cursor: null, nextCursor: null, partial: false };
   let trends = source === "merge" ? mergeTrends(exploreResult.trends, sidebarResult.trends) : exploreResult.trends.length > 0 ? exploreResult.trends : sidebarResult.trends;
@@ -451,7 +290,7 @@ async function listTrends(params) {
       cacheExpiresAt: expiresAt,
       cursor: cursor ?? null,
       nextCursor: nextCursor ?? null,
-      apiCalls: apiCalls2,
+      apiCalls,
       parserVersion: PARSER_VERSION,
       partial
     }
@@ -672,7 +511,7 @@ async function searchTweets(params) {
     if (!nc || tweets.length === 0) break;
     currentCursor = nc;
   }
-  const apiCalls2 = getApiCallCount();
+  const apiCalls = getApiCallCount();
   const response = {
     ok: true,
     data: {
@@ -686,7 +525,7 @@ async function searchTweets(params) {
       count: allTweets.length,
       pages,
       sampled: true,
-      apiCalls: apiCalls2,
+      apiCalls,
       nextCursor
     }
   };
@@ -749,21 +588,17 @@ async function getTrendDetail(id, raw) {
     }
     throw new AppError("INVALID_PARAMS", `Could not fetch trend "${id}": ${msg}`);
   }
-  const apiCalls2 = getApiCallCount();
+  const apiCalls = getApiCallCount();
   const detail = parseTrendDetail(rawData, id);
   if (raw) detail._raw = rawData;
   return {
     ok: true,
     data: { detail },
-    meta: { requestedAt, apiCalls: apiCalls2 }
+    meta: { requestedAt, apiCalls }
   };
 }
 
 export {
-  config,
-  EXIT_CODES,
-  HTTP_STATUS,
-  AppError,
   WOEID_PRESETS,
   listTrends,
   listLocations,

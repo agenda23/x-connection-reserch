@@ -250,4 +250,26 @@ function handleError(err: unknown): never {
   process.exit(1);
 }
 
-program.parseAsync(process.argv);
+const isServe = process.argv.includes("serve");
+
+async function exitCli(code: 0 | 1): Promise<never> {
+  if (!isServe) {
+    try {
+      const { closeEmusksSession } = await import("./lib/emusks-client.js");
+      await Promise.race([
+        closeEmusksSession(),
+        new Promise((resolve) => setTimeout(resolve, 500)),
+      ]);
+    } catch {
+      // best-effort cleanup
+    }
+  }
+  process.exit(code);
+}
+
+program
+  .parseAsync(process.argv)
+  .then(() => exitCli(0))
+  .catch((err) => {
+    handleError(err);
+  });

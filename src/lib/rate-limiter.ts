@@ -1,13 +1,16 @@
 import { config } from "../config.js";
 
 let queue = Promise.resolve();
+let isFirstCall = true;
 
 export function serialized<T>(fn: () => Promise<T>): Promise<T> {
-  const next = queue.then(fn);
-  queue = next.then(
-    () => delay(config.requestDelayMs),
-    () => delay(config.requestDelayMs),
-  );
+  const run = async () => {
+    if (!isFirstCall) await delay(config.requestDelayMs);
+    isFirstCall = false;
+    return fn();
+  };
+  const next = queue.then(run);
+  queue = next;
   return next;
 }
 

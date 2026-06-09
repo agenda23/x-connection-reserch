@@ -44,7 +44,7 @@
 
 | 項目 | 内容 |
 |------|------|
-| X セッション | `.env` の `TWITTER_AUTH_TOKEN`（起動時自動読み込み、最優先） |
+| X セッション | `TWITTER_AUTH_TOKEN`（`process.env` 最優先、`.env` フォールバック） |
 | `TWITTER_CT0` | **不要**（emusks が自動取得） |
 | HTTP API キー | `X-API-Key`（`API_KEY` 設定時は必須） |
 

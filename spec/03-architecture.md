@@ -54,7 +54,7 @@
 | CLI | commander | サブコマンド・ヘルプ生成 |
 | HTTP サーバー | Hono | 軽量・TypeScript 親和性・n8n 向け JSON API に適する |
 | バリデーション | zod | リクエスト/レスポンススキーマ検証 |
-| 環境変数 | dotenv | `.env` の起動時自動読み込み（`override: true`） |
+| 環境変数 | dotenv | 優先順位付き `.env` 自動読み込み（`process.env` 最優先） |
 | ビルド | tsx（開発）/ tsup（本番） | ESM 出力 |
 
 ## 3. ディレクトリ構成（案）
@@ -93,17 +93,19 @@ twitter-cli-test/
 
 **責務:**
 
-- 起動直後にルート `.env` を `dotenv` で読み込む（`override: true` で **`.env` 最優先**）
+- 起動直後に複数 `.env` 候補を優先度の低い順に読み込み、起動前の `process.env` を復元する（**環境変数が常に最優先**）
 - `TWITTER_AUTH_TOKEN` 等の設定値を型付きで提供
 - CLI / HTTP の両エントリで **必ず最初に import** する
 
 ```ts
 // src/config.ts（概念）
-import { config as loadEnv } from "dotenv";
-import { resolve } from "node:path";
-
-const envPath = process.env.DOTENV_PATH ?? resolve(process.cwd(), ".env");
-loadEnv({ path: envPath, override: true });
+const presetEnv = { ...process.env };
+for (const path of [packageRoot, cwd, userConfig]) {
+  loadEnv({ path, override: true });
+}
+for (const [key, value] of Object.entries(presetEnv)) {
+  if (value !== undefined) process.env[key] = value;
+}
 
 export const config = {
   twitterAuthToken: process.env.TWITTER_AUTH_TOKEN ?? "",
@@ -112,24 +114,33 @@ export const config = {
 };
 ```
 
+**`TWITTER_AUTH_TOKEN` 解決順位（高→低）:**
+
+| 順位 | ソース |
+|------|--------|
+| 1 | `process.env.TWITTER_AUTH_TOKEN`（シェル / CI / インライン） |
+| 2 | `DOTENV_PATH` または `~/.config/x-trends/.env` |
+| 3 | `process.cwd()/.env` |
+| 4 | パッケージルート `.env` |
+
 **読み込みフロー:**
 
 ```
-プロセス起動
+プロセス起動（process.env に既存値あり得る）
     │
     ▼
 config.ts が import される
     │
-    ├─► dotenv: .env を読み込み（override: true）
-    │
-    ├─► TWITTER_AUTH_TOKEN 取得
-    │       ├─ .env にあり → その値を使用（最優先）
-    │       └─ .env なし → process.env（CI Secrets 等）
+    ├─► presetEnv = { ...process.env } を保存
+    ├─► dotenv: パッケージ .env → cwd/.env → ユーザー .env（低→高）
+    ├─► presetEnv を復元（環境変数が .env より優先）
     │
     └─► 後続モジュールが config を参照
 ```
 
-**CI / GitHub Actions:** `.env` をリポジトリに含めない。`env: TWITTER_AUTH_TOKEN: ${{ secrets... }}` で注入する（`.env` 不在時は `process.env` のみ）。
+**CI / GitHub Actions:** `env: TWITTER_AUTH_TOKEN: ${{ secrets... }}` で注入（最優先で使用される）。
+
+**グローバル CLI:** `export TWITTER_AUTH_TOKEN=...` または `~/.config/x-trends/.env` を推奨。
 
 ### 4.1 EmusksClient（Adapter）
 
@@ -355,7 +366,7 @@ Internet / n8n
       │
       ▼
 [emusks] ──► X API
-  TWITTER_AUTH_TOKEN（.env 最優先で自動読み込み）
+  TWITTER_AUTH_TOKEN（process.env 最優先で自動読み込み）
 ```
 
 ## 10. 実装フェーズ

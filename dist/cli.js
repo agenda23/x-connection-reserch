@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 import {
-  AppError,
-  EXIT_CODES,
   WOEID_PRESETS,
   getSettings,
   getTrendDetail,
   listLocations,
   listTrends,
   searchTweets
-} from "./chunk-SMMZSDBE.js";
+} from "./chunk-NYSQNTS4.js";
+import {
+  AppError,
+  EXIT_CODES
+} from "./chunk-AOWFVCNZ.js";
 
 // src/cli.ts
 import { Command } from "commander";
@@ -179,4 +181,20 @@ function handleError(err) {
   console.error(err instanceof Error ? err.message : String(err));
   process.exit(1);
 }
-program.parseAsync(process.argv);
+var isServe = process.argv.includes("serve");
+async function exitCli(code) {
+  if (!isServe) {
+    try {
+      const { closeEmusksSession } = await import("./emusks-client-3U7DI66V.js");
+      await Promise.race([
+        closeEmusksSession(),
+        new Promise((resolve) => setTimeout(resolve, 500))
+      ]);
+    } catch {
+    }
+  }
+  process.exit(code);
+}
+program.parseAsync(process.argv).then(() => exitCli(0)).catch((err) => {
+  handleError(err);
+});

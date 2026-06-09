@@ -69,7 +69,7 @@ src/
 ## Critical constraints
 
 - **Serial requests only** — parallel emusks calls are forbidden (BAN risk). `EmusksClient` enforces this.
-- **`config.ts` must be imported first** in both `cli.ts` and `index.ts`; it loads `.env` with `override: true`.
+- **`config.ts` must be imported first** in both `cli.ts` and `index.ts`; it loads `.env` files with `process.env` taking highest priority.
 - **`ct0` is not needed** — emusks auto-obtains it from `TWITTER_AUTH_TOKEN`.
 - **`source=merge`** fetches from both explore + sidebar (max 3 emusks calls per `list`). Never exceed this.
 - **`exclude-promoted` defaults to `true`** — the parser filters `category: promoted` at the `TrendParser` layer, not the service layer.
@@ -80,7 +80,7 @@ src/
 
 | Variable | Required | Default | Notes |
 |---|---|---|---|
-| `TWITTER_AUTH_TOKEN` | yes | — | X `auth_token` cookie value |
+| `TWITTER_AUTH_TOKEN` | yes | — | X `auth_token` cookie value (`process.env` > `~/.config/x-trends/.env` > `cwd/.env`) |
 | `API_KEY` | HTTP recommended | — | `X-API-Key` header auth |
 | `PORT` | no | `3920` | HTTP server port |
 | `REQUEST_DELAY_MS` | no | `3000` | Min ms between emusks calls |

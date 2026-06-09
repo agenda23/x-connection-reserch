@@ -1,10 +1,48 @@
-import { config as loadEnv } from "dotenv";
-import { resolve } from "node:path";
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { config as loadEnv } from "dotenv";
 
-const repoRoot = resolve(fileURLToPath(import.meta.url), "../../..");
-const envPath = process.env.DOTENV_PATH ?? resolve(repoRoot, ".env");
-loadEnv({ path: envPath, override: true });
+function resolvePackageRoot(moduleUrl: string): string {
+  let dir = dirname(fileURLToPath(moduleUrl));
+  for (let i = 0; i < 5; i++) {
+    if (existsSync(resolve(dir, "package.json"))) return dir;
+    dir = resolve(dir, "..");
+  }
+  return dir;
+}
+
+function resolveUserConfigPath(): string {
+  if (process.env.DOTENV_PATH) return process.env.DOTENV_PATH;
+  const configHome = process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config");
+  return resolve(configHome, "x-trends", ".env");
+}
+
+/**
+ * Load .env files from lowest to highest file priority, then restore any
+ * variables that were already set in the process environment (highest priority).
+ */
+function loadEnvFiles(paths: readonly string[]): void {
+  const presetEnv = { ...process.env };
+  for (const path of paths) {
+    if (!existsSync(path)) continue;
+    loadEnv({ path, override: true });
+  }
+  for (const [key, value] of Object.entries(presetEnv)) {
+    if (value !== undefined) {
+      process.env[key] = value;
+    }
+  }
+}
+
+const packageRoot = resolvePackageRoot(import.meta.url);
+
+loadEnvFiles([
+  resolve(packageRoot, ".env"),
+  resolve(process.cwd(), ".env"),
+  resolveUserConfigPath(),
+]);
 
 export const config = {
   twitterAuthToken: process.env.TWITTER_AUTH_TOKEN ?? "",
