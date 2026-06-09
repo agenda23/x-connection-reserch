@@ -21,12 +21,14 @@
 
 ## 1. 推奨構成
 
+
 | 項目 | この PC での推奨 |
 |------|------------------|
-| 配布方法 | リポジトリ clone + `pnpm add -g <絶対パス>`（npm 公開不要） |
+| 配布方法 | `pnpm pack` → `pnpm add -g <tarball>`（npm 公開不要・リポジトリ非依存） |
 | コマンド | `x-trends`（どのディレクトリからでも） |
 | 認証 | `~/.config/x-trends/.env` または `export TWITTER_AUTH_TOKEN=...` |
-| ソース | `/Volumes/SSD/workspace/twitter-cli-test`（外付け SSD） |
+| ソース | `/Volumes/SSD/workspace/twitter-cli-test`（開発・ビルド用） |
+
 
 ---
 
@@ -54,12 +56,14 @@ pnpm build
 
 `TWITTER_AUTH_TOKEN` は次の優先順位（高→低）で自動解決されます。
 
-| 順位 | ソース |
-|------|--------|
-| 1 | `process.env.TWITTER_AUTH_TOKEN`（シェル export） |
-| 2 | `DOTENV_PATH` または `~/.config/x-trends/.env` |
-| 3 | カレントディレクトリの `.env` |
-| 4 | パッケージルートの `.env` |
+
+| 順位  | ソース                                          |
+| --- | -------------------------------------------- |
+| 1   | `process.env.TWITTER_AUTH_TOKEN`（シェル export） |
+| 2   | `DOTENV_PATH` または `~/.config/x-trends/.env`  |
+| 3   | カレントディレクトリの `.env`                           |
+| 4   | パッケージルートの `.env`                             |
+
 
 ### グローバル CLI 向け（推奨）
 
@@ -88,18 +92,28 @@ x-trends settings
 
 ## 4. グローバル CLI として使う
 
-**重要:** `pnpm add -g .`（相対パス）は使わないでください。リンク先が壊れ、`x-trends: command not found` になることがあります。
+### 方法 A: `pnpm pack`（推奨）
+
+tarball からインストールすると、**実行ファイルは pnpm のグローバル store にコピー**されます。リポジトリのディレクトリや SSD マウントに依存しません。
 
 ```bash
 cd /Volumes/SSD/workspace/twitter-cli-test
 pnpm build
-pnpm add -g /Volumes/SSD/workspace/twitter-cli-test
+pnpm pack
+# → x-trends-0.1.0.tgz が生成される
+
+# tarball を固定場所に置く（再インストール用・任意）
+mkdir -p ~/.local/share/x-trends
+cp x-trends-0.1.0.tgz ~/.local/share/x-trends/
+
+# グローバルインストール
+pnpm add -g ~/.local/share/x-trends/x-trends-0.1.0.tgz
 ```
 
 成功時の表示例:
 
 ```
-+ x-trends 0.1.0 <- ../../../../../../Volumes/SSD/workspace/twitter-cli-test
++ x-trends 0.1.0
 ```
 
 確認:
@@ -108,6 +122,20 @@ pnpm add -g /Volumes/SSD/workspace/twitter-cli-test
 which x-trends    # ~/Library/pnpm/x-trends
 x-trends --help
 ```
+
+> 以前リンクインストール（`pnpm add -g <リポジトリパス>`）していた場合は、先に `pnpm remove -g x-trends` してください。
+
+### 方法 B: リポジトリへのリンク（開発向け）
+
+ソース変更を `pnpm build` だけで即反映したい場合のみ。
+
+```bash
+pnpm add -g /Volumes/SSD/workspace/twitter-cli-test   # . ではなく絶対パス
+```
+
+成功時: `+ x-trends 0.1.0 <- .../twitter-cli-test`（`←` 付き）
+
+**注意:** リポジトリパス・SSD マウントに依存します。
 
 ### PATH が通らない場合
 
@@ -138,15 +166,24 @@ x-trends list --preset japan --diff
 x-trends search --query "#AI" --count 10
 ```
 
-### コードを更新したあと
+### コードを更新したあと（pack インストール時）
 
 ```bash
 cd /Volumes/SSD/workspace/twitter-cli-test
 git pull          # 必要なら
-pnpm build        # 必須（グローバル CLI は dist/ を実行）
+pnpm build
+pnpm pack
+cp x-trends-0.1.0.tgz ~/.local/share/x-trends/
+pnpm add -g ~/.local/share/x-trends/x-trends-0.1.0.tgz
 ```
 
-グローバルリンクはそのままで OK です。再インストールは通常不要です。
+バージョンが変わった場合は tarball 名も変わります（例: `x-trends-0.1.1.tgz`）。
+
+### コードを更新したあと（リンクインストール時）
+
+```bash
+pnpm build   # 再インストール不要
+```
 
 ### 実行時間の目安
 
@@ -190,13 +227,15 @@ x-trends list --preset japan --format json
 
 ### グローバルオプション
 
-| オプション | 短縮 | デフォルト | 説明 |
-|-----------|------|-----------|------|
-| `--format <fmt>` | `-f` | `json` | `json` \| `table` |
-| `--raw` | — | false | 生 emusks レスポンスを `_raw` に含める |
-| `--verbose` | `-v` | false | デバッグログ |
-| `--version` | `-V` | — | バージョン表示 |
-| `--help` | `-h` | — | ヘルプ |
+
+| オプション            | 短縮   | デフォルト  | 説明                          |
+| ---------------- | ---- | ------ | --------------------------- |
+| `--format <fmt>` | `-f` | `json` | `json` | `table`            |
+| `--raw`          | —    | false  | 生 emusks レスポンスを `_raw` に含める |
+| `--verbose`      | `-v` | false  | デバッグログ                      |
+| `--version`      | `-V` | —      | バージョン表示                     |
+| `--help`         | `-h` | —      | ヘルプ                         |
+
 
 ---
 
@@ -206,33 +245,39 @@ x-trends list --preset japan --format json
 x-trends list [オプション]
 ```
 
-| オプション | 短縮 | デフォルト | 説明 |
-|-----------|------|-----------|------|
-| `--woeid <number>` | `-w` | — | 地域 WOEID |
-| `--preset <name>` | `-p` | — | プリセット（下表） |
-| `--count <number>` | `-n` | 20 | 件数（最大 50） |
-| `--source <src>` | `-s` | `explore` | `explore` \| `sidebar` \| `merge` |
-| `--no-exclude-promoted` | — | — | プロモーションを含める |
-| `--categories <list>` | — | — | `trending,event,topic` 等（カンマ区切り） |
-| `--diff` | — | false | 前回との差分 |
-| `--cursor <cursor>` | — | — | ページネーション |
+
+| オプション                   | 短縮   | デフォルト     | 説明                               |
+| ----------------------- | ---- | --------- | -------------------------------- |
+| `--woeid <number>`      | `-w` | —         | 地域 WOEID                         |
+| `--preset <name>`       | `-p` | —         | プリセット（下表）                        |
+| `--count <number>`      | `-n` | 20        | 件数（最大 50）                        |
+| `--source <src>`        | `-s` | `explore` | `explore` | `sidebar` | `merge`  |
+| `--no-exclude-promoted` | —    | —         | プロモーションを含める                      |
+| `--categories <list>`   | —    | —         | `trending,event,topic` 等（カンマ区切り） |
+| `--diff`                | —    | false     | 前回との差分                           |
+| `--cursor <cursor>`     | —    | —         | ページネーション                         |
+
 
 **プリセット:**
 
-| preset | 地域 | WOEID |
-|--------|------|-------|
-| `worldwide` | 全世界 | 1 |
-| `japan` | 日本 | 23424856 |
-| `us` | 米国 | 23424977 |
-| `uk` | 英国 | 23424975 |
-| `tokyo` | 東京 | 1118370 |
+
+| preset      | 地域  | WOEID    |
+| ----------- | --- | -------- |
+| `worldwide` | 全世界 | 1        |
+| `japan`     | 日本  | 23424856 |
+| `us`        | 米国  | 23424977 |
+| `uk`        | 英国  | 23424975 |
+| `tokyo`     | 東京  | 1118370  |
+
 
 **API 呼び出し回数（`meta.apiCalls`）:**
 
-| 条件 | 回数 |
-|------|------|
+
+| 条件                          | 回数                             |
+| --------------------------- | ------------------------------ |
 | `--preset` / `--woeid` 指定あり | 3（login + setLocation + fetch） |
-| 地域未指定 | 2〜3 |
+| 地域未指定                       | 2〜3                            |
+
 
 **例:**
 
@@ -272,13 +317,15 @@ x-trends settings [--format table]
 x-trends search --query <query> [オプション]
 ```
 
-| オプション | 短縮 | デフォルト | 上限 |
-|-----------|------|-----------|------|
-| `--query <query>` | `-q` | **必須** | — |
-| `--mode <mode>` | `-m` | `top` | `top` \| `latest` |
-| `--count <number>` | `-n` | 20 | 20 |
-| `--max-pages <number>` | — | 1 | 2 |
-| `--since <date>` | — | — | 7 日以内（`YYYY-MM-DD`） |
+
+| オプション                  | 短縮   | デフォルト  | 上限                  |
+| ---------------------- | ---- | ------ | ------------------- |
+| `--query <query>`      | `-q` | **必須** | —                   |
+| `--mode <mode>`        | `-m` | `top`  | `top` | `latest`    |
+| `--count <number>`     | `-n` | 20     | 20                  |
+| `--max-pages <number>` | —    | 1      | 2                   |
+| `--since <date>`       | —    | —      | 7 日以内（`YYYY-MM-DD`） |
+
 
 ```bash
 x-trends search --query "#AI" --count 10
@@ -309,14 +356,16 @@ x-trends serve [--port 3920] [--host 0.0.0.0]
 
 ### 環境変数（参考）
 
-| 変数名 | デフォルト | 説明 |
-|--------|-----------|------|
-| `TWITTER_AUTH_TOKEN` | — | **必須** |
-| `DOTENV_PATH` | `~/.config/x-trends/.env` | ユーザー設定パス |
-| `REQUEST_DELAY_MS` | `3000` | API 呼び出し間隔（ms） |
-| `CACHE_TTL_SECONDS` | `300` | トレンドキャッシュ TTL |
-| `PORT` | `3920` | HTTP サーバーポート（`serve` 時） |
-| `API_KEY` | — | HTTP API キー（`serve` 時推奨） |
+
+| 変数名                  | デフォルト                     | 説明                       |
+| -------------------- | ------------------------- | ------------------------ |
+| `TWITTER_AUTH_TOKEN` | —                         | **必須**                   |
+| `DOTENV_PATH`        | `~/.config/x-trends/.env` | ユーザー設定パス                 |
+| `REQUEST_DELAY_MS`   | `3000`                    | API 呼び出し間隔（ms）           |
+| `CACHE_TTL_SECONDS`  | `300`                     | トレンドキャッシュ TTL            |
+| `PORT`               | `3920`                    | HTTP サーバーポート（`serve` 時）  |
+| `API_KEY`            | —                         | HTTP API キー（`serve` 時推奨） |
+
 
 ---
 
@@ -325,7 +374,7 @@ x-trends serve [--port 3920] [--host 0.0.0.0]
 ### `command not found: x-trends`
 
 ```bash
-pnpm add -g /Volumes/SSD/workspace/twitter-cli-test   # . ではなく絶対パス
+pnpm add -g ~/.local/share/x-trends/x-trends-0.1.0.tgz
 echo $PATH | tr ':' '\n' | grep pnpm
 ```
 
@@ -354,14 +403,9 @@ cd /Volumes/SSD/workspace/twitter-cli-test && pnpm build
 
 ### 外付け SSD 未マウント
 
-グローバル CLI は SSD 上のリポジトリをリンク参照しているため、SSD がマウントされていないと `x-trends` は動きません。内蔵ディスクに clone するか、マウント後に使ってください。
+**pack インストール済み**なら SSD 未マウントでも `x-trends` は動きます（pnpm store にコピー済みのため）。
 
-### 壊れたグローバルインストール（`+ 5 <- ???`）
-
-```bash
-pnpm remove -g 5
-pnpm add -g /Volumes/SSD/workspace/twitter-cli-test
-```
+**リンクインストール**の場合は SSD マウントが必要です。
 
 ---
 
@@ -370,3 +414,4 @@ pnpm add -g /Volumes/SSD/workspace/twitter-cli-test
 - [user-manual.md](./user-manual.md) — HTTP API・n8n・全般リファレンス
 - [../README.md](../README.md) — プロジェクト概要
 - [../spec/](../spec/) — 設計仕様
+

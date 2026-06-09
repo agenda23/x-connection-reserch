@@ -18,6 +18,9 @@ Thumbs.db
 npm-debug.log*
 pnpm-debug.log*
 
+# Pack output
+*.tgz
+
 # Editor
 .idea/
 .vscode/
