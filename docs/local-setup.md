@@ -253,7 +253,7 @@ x-trends list [オプション]
 | `--count <number>`      | `-n` | 20        | 件数（最大 50）                        |
 | `--source <src>`        | `-s` | `explore` | `explore` | `sidebar` | `merge`  |
 | `--no-exclude-promoted` | —    | —         | プロモーションを含める                      |
-| `--categories <list>`   | —    | —         | `trending,event,topic` 等（カンマ区切り） |
+| `--categories <list>`   | —    | —         | `category` フィルタ（下表参照） |
 | `--diff`                | —    | false     | 前回との差分                           |
 | `--cursor <cursor>`     | —    | —         | ページネーション                         |
 
@@ -277,6 +277,30 @@ x-trends list [オプション]
 | --------------------------- | ------------------------------ |
 | `--preset` / `--woeid` 指定あり | 3（login + setLocation + fetch） |
 | 地域未指定                       | 2〜3                            |
+
+
+**`category` と `description`:**
+
+| フィールド | 例 | `--categories` で指定 |
+|-----------|-----|----------------------|
+| `category` | `trending`, `topic`, `promoted` | 可 |
+| `description` | `"Gaming · Trending"`, `"Trending in Japan"` | **不可**（X 側ラベルの出力のみ） |
+
+**`--categories` に指定できる値:**
+
+| 値 | 備考 |
+|----|------|
+| `trending` | 通常トレンド |
+| `topic` | AI 要約付きトレンド |
+| `promoted` | `--no-exclude-promoted` 時のみ取得可（デフォルト除外） |
+| `event`, `unknown` | 型定義のみ。現パーサーでは付与されず、指定しても通常 0 件 |
+
+`description` で絞る場合は JSON 取得後に `jq` 等で後処理:
+
+```bash
+x-trends list --preset japan --format json \
+  | jq '.data.trends[] | select(.description | test("Gaming"))'
+```
 
 
 **例:**

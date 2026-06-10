@@ -123,7 +123,7 @@ x-trends list [オプション]
 | `--count <number>` | `-n` | 20 | 取得件数（最大 50） |
 | `--source <src>` | `-s` | `explore` | `explore` \| `sidebar` \| `merge` |
 | `--no-exclude-promoted` | — | — | プロモーション込み |
-| `--categories <list>` | — | — | カテゴリフィルタ（カンマ区切り） |
+| `--categories <list>` | — | — | `category` フィルタ（カンマ区切り。下表参照） |
 | `--diff` | — | false | 前回との差分 |
 | `--cursor <cursor>` | — | — | ページネーションカーソル |
 
@@ -150,6 +150,38 @@ x-trends list [オプション]
 **`--diff`:**
 
 差分は `~/.cache/x-trends/` にスナップショット保存。初回はベースライン作成のみで `changes` は付きません。
+
+**`category` と `description` · `--categories` フィルタ:**
+
+| フィールド | 由来 | 例 | CLI でフィルタ |
+|-----------|------|-----|---------------|
+| `category` | パーサーが付与 | `trending`, `topic`, `promoted` | `--categories` で可能 |
+| `description` | X の `trend_metadata.domain_context` | `"Gaming · Trending"`, `"Trending in Japan"` | **不可**（出力のみ） |
+
+`--categories` は **`category` フィールドのみ** を対象にします。`description` による指定・フィルタオプションはありません。
+
+**`--categories` に指定できる値（実態）:**
+
+| 値 | いつ付くか | 備考 |
+|----|-----------|------|
+| `trending` | 通常のトレンド | 最も多い |
+| `topic` | AI 要約付きトレンド（Explore の `stories` モジュール） | 日本トレンドの上位に出やすい |
+| `promoted` | プロモーション | デフォルトでは `--exclude-promoted` により **除外**される。含めるには `--no-exclude-promoted` が必要 |
+| `event`, `unknown` | — | 型定義にはあるが **現パーサーでは付与されない**。指定しても通常 0 件 |
+
+未知のカテゴリ名（例: `--categories foo`）を指定してもエラーにはならず、0 件になります。
+
+**`description` で絞りたい場合（後処理）:**
+
+```bash
+# "Gaming" を含む description のみ
+x-trends list --preset japan --format json \
+  | jq '.data.trends[] | select(.description | test("Gaming"))'
+
+# 完全一致
+x-trends list --preset japan --format json \
+  | jq '.data.trends[] | select(.description == "Trending in Japan")'
+```
 
 **使用例:**
 
